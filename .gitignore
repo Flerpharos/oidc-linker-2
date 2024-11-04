@@ -1,2 +1,12 @@
 node_modules/*
 build/*
+
+linkt.sqlite
+linkt.sqlite-shm
+linkt.sqlite-wal
+
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
