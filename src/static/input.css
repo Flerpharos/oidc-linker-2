@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* --sl-font-sans: "Playwrite DE Grund", cursive, ui-sans-serif, sans-serif; */
+  --sl-font-sans: "Red Hat Display", ui-sans-serif, sans-serif;
+
+  --sl-color-primary-50: var(--sl-color-indigo-50);
+  --sl-color-primary-100: var(--sl-color-indigo-100);
+  --sl-color-primary-200: var(--sl-color-indigo-200);
+  --sl-color-primary-300: var(--sl-color-indigo-300);
+  --sl-color-primary-400: var(--sl-color-indigo-400);
+  --sl-color-primary-500: var(--sl-color-indigo-500);
+  --sl-color-primary-600: var(--sl-color-indigo-600);
+  --sl-color-primary-700: var(--sl-color-indigo-700);
+  --sl-color-primary-800: var(--sl-color-indigo-800);
+  --sl-color-primary-900: var(--sl-color-indigo-900);
+  --sl-color-primary-950: var(--sl-color-indigo-950);
+}
+
+:not(:defined) {
+  visibility: hidden;
+}
+
+.sl-toast-stack {
+  left: 0;
+  right: auto;
+}
+
+.copy-enhance {
+  color: var(--sl-color-neutral-600);
+}
+
+sl-copy-button:hover > .copy-enhance {
+  color: var(--sl-color-primary-600);
+}
+
+sl-copy-button:active > .copy-enhance {
+  color: var(--sl-color-primary-700);
+}
+
+.link-card {
+  @apply w-full;
+}
+
+.link-card::part(base) {
+  @apply w-full relative;
+}
+
+.link-card::part(body) {
+  @apply font-ui flex flex-row flex-nowrap justify-between p-3;
+}
+
+.link-card > sl-badge {
+  @apply absolute top-0 right-0 -translate-y-1/2 translate-x-2;
+}
+
+.link-card > div.link-header {
+  @apply flex flex-col flex-nowrap flex-1 pl-1 min-w-4;
+}
+
+.link-card > div.link-header > strong.name {
+  @apply truncate font-sans text-sm font-medium;
+}
+
+.link-card > div.link-header > span.destination {
+  @apply dark:text-neutral-400 text-neutral-600 text-sm leading-snug truncate;
+}
+
+.link-card > div.link-actions {
+  @apply flex flex-row flex-nowrap items-center pt-1;
+}
+
+sl-tab-group::part(tabs) {
+  @apply mx-4;
+}
+/* .link-card .name {
+}
+
+.link-card .destination {
+}
+
+.link-card
+    ::part(body)
+        div.link-header
+            strong.name
+            span.description
+        div.link-actions
+            sl-icon-button#copy
+            sl-icon-button#edit
+            sl-icon-button#delete
+     */

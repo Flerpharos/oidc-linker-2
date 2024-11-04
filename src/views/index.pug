@@ -1,0 +1,14 @@
+extends layout.pug
+
+block scripts
+  script(async type="module").
+    import { isLoggedIn } from "/auth.mjs"
+
+    if ( (await isLoggedIn()).result ) location.assign("/admin");
+
+block content
+  .w-full.h-screen.flex.flex-col.items-center.justify-center.gap-4.max-w-xl.p-4
+    h1.text-7xl.font-sans.mb-6.w-full.text-center= "Linky Dinky"
+    p.text-xl.font-sans.font-light.text-center= "Linking your needs with OAuth"
+
+    sl-button(size="large" variant="primary" href="/login" class="w-full mt-4")= "Sign In with ZITADEL"

@@ -1,0 +1,483 @@
+extends layout.pug
+
+block scripts
+  script(async type="module").
+    import { isLoggedIn } from "/auth.mjs";
+
+    if (!(await isLoggedIn()).result) location.assign("/");
+
+  script(type="module" defer).
+    import { isLoggedIn, user, zfetch, logout } from "/auth.mjs";
+    import {
+    formatDistanceToNowStrict,
+    addDays,
+    roundToNearestHours,
+    } from "https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm";
+    //- import Fuse from 'https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.mjs'
+    import { getFormControls } from 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/utilities/form.js';
+
+    let cardEditing;
+
+    function loadEditData(card) {
+      let controls = getFormControls(document.getElementById("editForm"));
+
+      controls.find(el => el.name =='name').value = card.name;
+      controls.find(el => el.name=='destination').value = card.destination;
+      if (card.expiry > 0) {
+        controls.find(el => el.name=='expiry').valueAsDate = new Date(card.expiry);
+        controls.find(el => el.name=='expires').value = 'yes' 
+        controls.find(el => el.name=='expiry').disabled = false;
+      } else { 
+        controls.find(el => el.name=='expiry').valueAsDate = null;
+        controls.find(el => el.name=='expires').value = 'no';
+        controls.find(el => el.name=='expiry').disabled = true;
+      }
+
+      cardEditing = card;
+      document.getElementById('editTab').disabled = false;
+
+      document.getElementById('editTab')
+        .updateComplete.then(() => document.getElementById('panels').show('edit'));
+    }
+
+    class LinkCard {
+    constructor(id, name, slug, expiry, destination, description) {
+      this.id = id;
+      this.name = name;
+      this.slug = slug;
+      this.expiry = expiry;
+      this.description = description;
+      this.destination = destination;
+    }
+
+    updateExpiry(expiry) {
+      if (this.expiry == 0) {
+      expiry.setAttribute("variant", "primary");
+      expiry.textContent = "Forever";
+      } else if (this.expiry == -1) {
+      expiry.setAttribute("variant", "neutral");
+      expiry.textContent = "Archived";
+      } else if (this.expiry < Date.now()) {
+      expiry.setAttribute("variant", "danger");
+      expiry.textContent = "Expired";
+      } else {
+      if (this.expiry < addDays(new Date(), 1).getTime()) {
+        expiry.setAttribute("variant", "warning");
+      } else {
+        expiry.setAttribute("variant", "success");
+      }
+
+      expiry.textContent =
+        "Expires in " + formatDistanceToNowStrict(new Date(this.expiry));
+      }
+    }
+
+    zUpdate() {
+      const data = new URLSearchParams();
+      data.append("id", this.id);
+      data.append("name", this.name);
+      data.append("description", this.description);
+      data.append("expiration", this.expiry);
+
+      return zfetch("/api/v1/link", {
+      method: "POST",
+      body: data,
+      });
+    }
+
+    replace() {
+      clearInterval(this.expiryUpdateInterval);
+
+      const card = this.card;
+      card.replaceWith(this.render());
+    }
+
+    remove() {
+      clearInterval(this.expiryUpdateInterval);
+      this.card.remove();
+      this.card = null;
+    }
+
+    updateArchive(edit, archive, archiveTooltip) {
+      if (this.expiry == -1) {
+      edit.disabled = true;
+      archive.setAttribute("name", "folder2-open");
+      archive.setAttribute("label", "Restore");
+      archiveTooltip.setAttribute("content", "Restore");
+      } else {
+      edit.disabled = false;
+      archive.setAttribute("name", "archive");
+      archive.setAttribute("label", "Archive");
+      archiveTooltip.setAttribute("content", "Archive");
+      }
+    }
+
+    render() {
+      const name = document.createElement("strong");
+      name.classList.add("name");
+      name.textContent = this.name;
+
+      //- const slug = document.createElement("span");
+      //- slug.classList.add("slug");
+      //- slug.textContent = this.slug;
+
+      //- const expiry = document.createElement("sl-relative-time");
+      //- expiry.setAttribute("sync", "true");
+      //- expiry.classList.add("expiry");
+      //- expiry.setAttribute("date", this.expiry.toString());
+
+      const expiry = document.createElement("sl-badge");
+      expiry.setAttribute("pill", "true");
+      expiry.setAttribute("variant", "neutral");
+      expiry.textContent = "Unknown Expiry";
+      this.expiryUpdateInterval = setInterval(
+      () => this.updateExpiry(expiry),
+      1000
+      );
+
+      const destination = document.createElement("span");
+      destination.classList.add("destination");
+      destination.textContent = this.destination;
+
+      const header = document.createElement("div");
+      header.classList.add("link-header");
+      header.appendChild(name);
+      header.appendChild(destination);
+
+      const copyIcon = document.createElement("sl-icon");
+      copyIcon.setAttribute("name", "link");
+      copyIcon.setAttribute("slot", "copy-icon");
+      copyIcon.classList.add("copy-enhance");
+      //- copyIcon.setAttribute("color", "sl-neutral-600");
+
+      const copy = document.createElement("sl-copy-button");
+      copy.setAttribute("value", `!{root}/s/${this.slug}`);
+      copy.appendChild(copyIcon);
+
+      const qrcode = document.createElement("sl-icon-button");
+      qrcode.setAttribute("name", "qr-code-scan");
+      qrcode.setAttribute("label", "QR Code");
+
+      qrcode.addEventListener("click", () => {
+      const qrcodeElement = document.getElementById("qrcode-code");
+      qrcodeElement.setAttribute("value", `!{root}/s/${this.slug}`);
+      qrcodeElement.setAttribute("label", `!{root}/s/${this.slug}`);
+
+      //- console.log("click")
+
+      document.getElementById("qrcode-dialog").show();
+      });
+
+      const edit = document.createElement("sl-icon-button");
+      edit.setAttribute("name", "highlighter");
+      edit.setAttribute("label", "Edit");
+
+
+      edit.addEventListener('click', () => {
+        if (this.expiry == -1) return;
+
+        loadEditData(this);
+        document.getElementById("editForm").focus();
+      })
+
+      const archive = document.createElement("sl-icon-button");
+      archive.setAttribute("name", "archive");
+      archive.setAttribute("label", "Archive");
+
+      const qrcodeTooltip = document.createElement("sl-tooltip");
+      qrcodeTooltip.setAttribute("content", "QR Code"); // XXX do we go to a new page?
+      qrcodeTooltip.appendChild(qrcode);
+
+      const editTooltip = document.createElement("sl-tooltip");
+      editTooltip.setAttribute("content", "Edit"); // XXX do we go to a new page?
+      editTooltip.appendChild(edit);
+
+      const archiveTooltip = document.createElement("sl-tooltip");
+      archiveTooltip.setAttribute("content", "Archive");
+      archiveTooltip.appendChild(archive);
+
+      this.updateArchive(edit, archive, archiveTooltip);
+
+      archive.addEventListener("click", async () => {
+      if (this.expiry != -1) {
+        this.expiry = -1;
+      } else {
+        this.expiry = 0;
+      }
+
+      if ((await this.zUpdate()).ok) {
+        this.updateArchive(edit, archive, archiveTooltip);
+      }
+      });
+
+      const actions = document.createElement("div");
+      actions.classList.add("link-actions");
+      actions.appendChild(copy);
+      actions.appendChild(qrcodeTooltip);
+      actions.appendChild(editTooltip);
+      actions.appendChild(archiveTooltip);
+
+      const card = document.createElement("sl-card");
+      card.classList.add("link-card");
+
+      card.appendChild(header);
+      card.appendChild(actions);
+      card.appendChild(expiry);
+      //- card.appendChild(name);
+      //- card.appendChild(slug);
+      //- card.appendChild(expiry);
+      //- card.appendChild(destination);
+      //- card.appendChild(description);
+
+      this.card = card;
+
+      return card;
+    }
+    }
+
+    const userData = await user();
+
+    const avatar = document.getElementById("avatar");
+
+    avatar.image = userData.picture;
+    avatar.label = `Profile picture for ${userData.preferred_username}`;
+
+    document.getElementById("logout-button").addEventListener("click", async () => {
+    if (isLoggedIn()) await logout();
+    location.assign("/");
+    });
+
+    const links = await zfetch("/api/v1/link").then(({ ok, result }) => {
+    if (!ok) return [];
+
+    return result.map(
+      (linky) =>
+      new LinkCard(
+        linky.id,
+        linky.name,
+        linky.path,
+        linky.expiration,
+        linky.destination,
+        linky.description
+      )
+    );
+    });
+
+    function search() {
+    const data = new FormData(document.getElementById("searchForm"));
+    //- console.log('input')
+
+    for (const linky of links) {
+      // TODO sorting
+
+      if ( // TODO gosh this needs to be prettier and cleaner
+      linky[data.get("type")].includes(data.get("search")) &&
+      ((linky.expiry == -1 && data.getAll("filter").includes("archived")) ||
+        (linky.expiry == 0 && data.getAll("filter").includes("permanent")) ||
+        (linky.expiry > 0 &&
+        linky.expiry < Date.now() &&
+        data.getAll("filter").includes("expired")) ||
+        (linky.expiry >= Date.now() &&
+        linky.expiry < addDays(new Date(), 1).getTime() &&
+        data.getAll("filter").includes("soon")) ||
+        (linky.expiry > Date.now() && data.getAll("filter").includes("later")))
+      ) {
+      if (linky.card == null || linky.card == undefined) {
+        //- console.log('a')
+        document.getElementById("list").appendChild(linky.render());
+      }
+      } else if (linky.card != null) {
+      linky.remove();
+      }
+    }
+    }
+
+    document.getElementById("expiry").valueAsDate = addDays(
+    roundToNearestHours(new Date()),
+    7
+    );
+
+    ["input", "sl-change"].forEach((val) =>
+    document.getElementById("searchForm").addEventListener(val, search)
+    );
+    search();
+
+    //- links.forEach((linky) => {
+    //-     documentget.appendChild(linky.render());
+    //- })
+
+    //- const test = new LinkCard(0, "Test", "jskdlhfjlka324", Date.now() + 10000, "https://next.flerp.dev", "Test URI");
+
+    //- const el = test.render();
+    //- console.log(el);
+
+    //- document.getElementById("test").appendChild(el);
+
+    document.getElementById("expires").addEventListener("sl-change", (evt) => {
+    if (evt.target.value == "no") {
+      document.getElementById("expiry").disabled = true;
+      document.getElementById("expiry").required = false;
+    } else {
+      document.getElementById("expiry").disabled = false;
+      document.getElementById("expiry").required = true;
+    }
+    });
+
+    document.getElementById("otherExpires").addEventListener("sl-change", (evt) => {
+    if (evt.target.value == "no") {
+      document.getElementById("otherExpiry").disabled = true;
+      document.getElementById("otherExpiry").required = false;
+    } else {
+      document.getElementById("otherExpiry").disabled = false;
+      document.getElementById("otherExpiry").required = true;
+    }
+    });
+
+    document.getElementById("newForm").addEventListener("submit", async (evt) => {
+    const data = new FormData(evt.target);
+    const params = new URLSearchParams();
+
+    params.append("name", data.get("name"));
+    params.append("destination", data.get("destination"));
+    params.append(
+      "expiration",
+      data.get("expires") == "yes" ? new Date(data.get("expiry")).getTime() : 0
+    );
+    params.append("description", "");
+
+    const res = await zfetch("/api/v1/link", {
+      method: "POST",
+      body: params,
+    });
+
+    if (res.ok) {
+      links.push(
+      new LinkCard(
+        res.result.id,
+        data.get("name"),
+        res.result.path,
+        parseInt(params.get("expiration")),
+        data.get("destination"),
+        ""
+      )
+      );
+      search();
+    }
+    });
+
+    document.getElementById("editForm").addEventListener('submit', async (evt) => {
+      const data = new FormData(evt.target);
+      cardEditing.name = data.get('name')
+      cardEditing.expiry = data.get('expires') == 'no' ? 0 : new Date(data.get('expiry')).getTime();
+
+      if ((await cardEditing.zUpdate()).ok) {
+        cardEditing.replace();
+        document.getElementById('panels').show('search');
+        document.getElementById('editTab').disabled = true;
+      }
+    })
+
+    document.getElementById("editExtraOptions").addEventListener('sl-select', async (evt) => {
+      switch (evt.detail.item.value) {
+        case 'copy':
+          navigator.clipboard.writeText('!{root}/s/' + cardEditing.slug);
+          // TODO notification
+          break;
+        case 'archive':
+          cardEditing.expiry = -1;
+          if ((await cardEditing.zUpdate()).ok) {
+            cardEditing.replace();
+            document.getElementById('panels').show('search');
+            document.getElementById('editTab').disabled = true;
+          }
+          break;
+        case 'delete':
+          if ((await zfetch('/api/v1/link/' + cardEditing.id, {method: 'DELETE'})).ok) {
+            cardEditing.remove();
+            document.getElementById('panels').show('search');
+            document.getElementById('editTab').disabled = true;
+          }
+          break;
+      }
+    })
+
+block content
+  .fixed.top-0.start-0.bg-transparent.p-4.z-10(class='md:end-0')
+    h1.text-lg.text-center(class='md:text-xl')='Linky Dinky'
+
+  .fixed.top-0.end-0.bg-transparent.p-4.z-10
+    sl-dropdown
+      button#avatar-button(slot="trigger")
+        sl-avatar#avatar(loading='eager')
+      sl-button.mt-2.font-ui#logout-button='Sign Out'
+      //- sl-menu.mt-2.dark
+      //-     sl-menu-item='Sign Out'
+
+      //- TODO make settings page & Dark mode toggle
+
+
+  .w-full.h-full.max-h-screen.flex.flex-col.items-center.justify-stretch.pt-12
+
+    sl-tab-group.max-w-4xl.w-full#panels
+      sl-tab(slot='nav' panel='new')='New' 
+      sl-tab(slot='nav' panel='search')='Search' 
+      sl-tab(slot='nav' panel='edit' disabled)#editTab='Edit' 
+
+      sl-tab-panel.px-4(name='search')
+        form.gap-2.grid.grid-cols-4.font-ui(onsubmit='return false')#searchForm
+          sl-select.col-span-1(name='type' value='name' hoist)
+            sl-option(value='name')='Name'
+            sl-option(value='destination')='URL'
+            sl-option(value='slug')='Slug'
+          sl-input.col-span-3(name='search' type='search' placeholder='Search')
+            sl-icon(name='search' slot='prefix')
+
+          sl-select.col-span-4(name='filter' multiple hoist value='permanent soon later' help-text='When does your linky Expire')
+            //- sl-icon(name='funnel' slot='prefix') // XXX doesn't position well with multiple
+            sl-option(value='permanent')='Forever'
+            sl-option(value='soon')='Soon'
+            sl-option(value='later')='Later'
+            sl-option(value='expired')='Expired'
+            sl-option(value='archived')='Archived'
+
+      sl-tab-panel.px-4(name='edit')
+        form.gap-2.grid.grid-cols-4.font-ui(onsubmit='return false')#editForm
+          sl-input.col-span-2(name='name' placeholder='Linky Name' help-text='How you refer to the linky' clearable required)
+          sl-input.col-span-2(disabled name='destination' type='url' help-text='Where the linky leads to' placeholder=root + '/' clearable required pattern="https?://(\\S+\\.)*\\S+")
+          sl-input.col-span-4#otherExpiry(name='expiry' type='datetime-local' help-text='When to automatically archive the linky' clearable class="md:col-span-2" disabled=true valueAsDate)
+          sl-radio-group.col-span-2#otherExpires(name='expires' value='no' class='md:col-span-1' help-text='Whether the linky expires')
+            // I like forever because it's sized better than "Permanent"
+            sl-radio-button(value='no')='Forever' 
+            sl-radio-button(value='yes')='Expires'
+          sl-button-group.col-span-2(class='md:col-span-1')
+            sl-button.flex-1(variant='primary' type='submit')='Update' 
+            sl-dropdown(placement='bottom-end')
+              sl-button(slot="trigger" variant="primary" caret) 
+                sl-visually-hidden='More options'
+              sl-menu#editExtraOptions 
+                //- TODO unarchive button
+                sl-menu-item(value='copy')='Copy Link'
+                  sl-icon(slot='prefix' name='link')
+                sl-menu-item(value='archive')='Archive Linky'
+                  sl-icon(slot='prefix' name='archive' )
+                sl-menu-item(value='delete')
+                  span(style='color: var(--sl-color-danger-600)')='Delete Forever' 
+                  sl-icon(slot='prefix' name='trash3' style='color: var(--sl-color-danger-600)')
+            //- sl-button(variant='warning' outline)='Archive' 
+            //- sl-button(variant='danger' outline)='Delete' 
+
+      sl-tab-panel.px-4(name='new')
+        form.gap-2.grid.grid-cols-4.font-ui(onsubmit='return false')#newForm
+          sl-input.col-span-2(name='name' placeholder='Linky Name' help-text='How you refer to the linky' clearable required)
+          sl-input.col-span-2(name='destination' type='url' help-text='Where the linky leads to' placeholder=root + '/' clearable required pattern="https?://(\\S+\\.)*\\S+")
+          sl-input.col-span-4#expiry(name='expiry' type='datetime-local' help-text='When to automatically archive the linky' clearable class="md:col-span-2" disabled=true valueAsDate)
+          sl-radio-group.col-span-2#expires(name='expires' value='no' class='md:col-span-1' help-text='Whether the linky expires')
+            // I like forever because it's sized better than "Permanent"
+            sl-radio-button(value='no')='Forever' 
+            sl-radio-button(value='yes')='Expires'
+          sl-button.col-span-2(variant='primary' class='md:col-span-1' type='submit')='Create Linky' 
+
+    .w-full.scroll-smooth.flex.flex-col.gap-5.flex-1.max-w-4xl.overflow-scroll.scrollbar-none.p-4#list
+
+  sl-dialog#qrcode-dialog(label='QR Code' no-header style="--width: min-content")
+    sl-qr-code#qrcode-code(size=250 class='m-[5px] mb-0')

@@ -1,0 +1,10 @@
+extends layout.pug
+
+block scripts
+
+block content
+  .w-full.h-screen.flex.flex-col.items-center.justify-center.gap-4.max-w-xl.p-4
+    h1.text-6xl.font-sans.w-full.text-center= "Error " + error
+    p.text-xl.font-ui.font-light.text-center!= message
+
+    sl-button(size="large" variant="danger" onclick="history.back()" class="w-full mt-4")= "Back" 

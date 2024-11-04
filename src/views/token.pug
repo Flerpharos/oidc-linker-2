@@ -1,0 +1,10 @@
+extends layout.pug
+
+block scripts
+  script.
+    localStorage.setItem("z_oauth_token", "!{token}");
+    //- localStorage.setItem("z_oauth_refresh", "!{refresh}");
+    localStorage.setItem("z_oauth_expiry", !{expiry});
+    location.assign("/admin");
+
+block content
